@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Zone — putt to the end zone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#14181f; --panel:#1c222c; --panel2:#222a36;
+    --felt:#2e6b43; --felt-dark:#27603b; --felt-line:#3c8052;
+    --zone:#e8c86a; --cream:#edebe4; --muted:#9aa3ae; --line:#2c3543;
+    --p1:#ff7a59; --p2:#36c5c0; --danger:#e2655a; --good:#7fd49a;
+    --font:"Space Grotesk",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);color:var(--cream);font-family:var(--font);
+    display:flex;align-items:flex-start;justify-content:center;
+    min-height:100%;padding:16px;line-height:1.4;
+  }
+  #app{width:100%;max-width:460px;position:relative}
+
+  /* ---- Scorecard ---- */
+  #scorecard{
+    display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;margin-bottom:12px;
+  }
+  .pcard{padding:6px 10px;border-radius:10px;text-align:center}
+  .pcard .name{font-size:13px;font-weight:500;letter-spacing:.02em}
+  .pcard .score{font-size:34px;font-weight:700;font-feature-settings:"tnum";line-height:1}
+  .pcard.p1 .name{color:var(--p1)} .pcard.p2 .name{color:var(--p2)}
+  .pcard.active{outline:2px solid currentColor;outline-offset:-1px}
+  .pcard.p1.active{color:var(--p1)} .pcard.p2.active{color:var(--p2)}
+  #roundinfo{text-align:center;color:var(--muted)}
+  #roundinfo .r{font-size:11px;text-transform:uppercase;letter-spacing:.12em}
+  #roundinfo .target{font-size:13px;color:var(--cream);font-weight:500}
+
+  /* ---- Canvas ---- */
+  #board{position:relative;border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+  canvas{display:block;width:100%;height:auto;touch-action:manipulation}
+
+  /* ---- Banner over board ---- */
+  #banner{
+    position:absolute;left:0;right:0;top:0;padding:10px 14px;
+    display:flex;justify-content:center;pointer-events:none;
+  }
+  #banner .pill{
+    background:rgba(20,24,31,.82);border:1px solid var(--line);border-radius:999px;
+    padding:7px 16px;font-size:14px;font-weight:500;backdrop-filter:blur(6px);
+  }
+
+  /* ---- Controls ---- */
+  #controls{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+  .btn{
+    font-family:var(--font);font-size:16px;font-weight:500;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel2);color:var(--cream);
+    border-radius:12px;padding:14px;transition:transform .06s,background .15s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--zone);color:#3a2f10;border-color:var(--zone);font-weight:700}
+  .btn:focus-visible{outline:2px solid var(--cream);outline-offset:2px}
+  .btn.ghost{background:transparent}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .hint{text-align:center;color:var(--muted);font-size:13px;min-height:18px}
+
+  /* ---- Overlays (menu / rules / result) ---- */
+  .overlay{
+    position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
+    background:rgba(20,24,31,.94);backdrop-filter:blur(4px);
+    border-radius:16px;padding:22px;overflow:auto;
+  }
+  .overlay.show{display:flex}
+  .overlay h1{font-size:30px;margin:4px 0 2px;letter-spacing:-.01em}
+  .overlay h2{font-size:18px;margin:0 0 14px;font-weight:500;color:var(--muted)}
+  .overlay h3{font-size:14px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:18px 0 8px}
+  .seg{display:flex;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:5px}
+  .seg button{
+    flex:1;font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;
+    border:none;background:transparent;color:var(--muted);border-radius:8px;padding:10px;
+  }
+  .seg button.on{background:var(--panel2);color:var(--cream)}
+  .seg button:focus-visible{outline:2px solid var(--cream)}
+  .field{margin-bottom:14px}
+  .field>label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .menu-foot{margin-top:auto;display:flex;flex-direction:column;gap:10px;padding-top:18px}
+  .rules p{margin:0 0 10px;font-size:15px}
+  .rules .lead{color:var(--cream)} .rules .sub{color:var(--muted);font-size:14px}
+  .rules table{width:100%;border-collapse:collapse;margin:6px 0 4px;font-size:13px}
+  .rules th,.rules td{border:1px solid var(--line);padding:6px 7px;text-align:center}
+  .rules th{color:var(--muted);font-weight:500}
+  .rules td.l{text-align:left;color:var(--muted)}
+  .tag{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+  .result-big{font-size:24px;font-weight:700;text-align:center;margin:6px 0}
+  .result-sub{text-align:center;color:var(--muted);margin-bottom:4px}
+  .topbar{position:absolute;top:14px;right:14px;z-index:5}
+  .icon-btn{
+    width:38px;height:38px;border-radius:10px;border:1px solid var(--line);
+    background:rgba(20,24,31,.7);color:var(--cream);font-size:15px;font-weight:700;cursor:pointer;
+  }
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="scorecard" aria-live="polite">
+    <div class="pcard p1" id="card1"><div class="name" id="name1">You</div><div class="score" id="score1">0</div></div>
+    <div id="roundinfo"><div class="r">Round <span id="roundnum">1</span></div><div class="target">to <span id="targetnum">5</span></div></div>
+    <div class="pcard p2" id="card2"><div class="name" id="name2">CPU</div><div class="score" id="score2">0</div></div>
+  </div>
+
+  <div id="board">
+    <canvas id="cv" aria-label="Putting lane"></canvas>
+    <div id="banner"><div class="pill" id="bannerText">Tap to start</div></div>
+    <div class="topbar"><button class="icon-btn" id="rulesBtn" aria-label="How to play">?</button></div>
+
+    <!-- Menu overlay -->
+    <div class="overlay show" id="menu">
+      <h1>Zone</h1>
+      <h2>Putt it into the end zone.</h2>
+
+      <div class="field">
+        <label>Players</label>
+        <div class="seg" id="segMode" role="tablist">
+          <button data-v="cpu" class="on">vs Computer</button>
+          <button data-v="2p">2 Players</button>
+        </div>
+      </div>
+
+      <div class="field" id="diffField">
+        <label>Computer skill</label>
+        <div class="seg" id="segDiff">
+          <button data-v="easy">Easy</button>
+          <button data-v="med" class="on">Medium</button>
+          <button data-v="hard">Hard</button>
+        </div>
+      </div>
+
+      <div class="field" id="openField">
+        <label>Who opens each round</label>
+        <div class="seg" id="segOpen">
+          <button data-v="0" class="on">You</button>
+          <button data-v="1">Computer</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Target score</label>
+        <div class="seg" id="segTarget">
+          <button data-v="3">3</button>
+          <button data-v="5" class="on">5</button>
+          <button data-v="7">7</button>
+        </div>
+      </div>
+
+      <div class="menu-foot">
+        <button class="btn primary" id="startBtn">Start game</button>
+        <button class="btn ghost" id="menuRulesBtn">How to play</button>
+      </div>
+    </div>
+
+    <!-- Rules overlay -->
+    <div class="overlay" id="rules">
+      <h1>How to play</h1>
+      <div class="rules">
+        <p class="lead">Each player putts from their own line toward the <b>far end zone</b>. One putt each per round, opener first.</p>
+        <p><span class="tag" style="background:var(--zone)"></span><b>In the end zone</b> &rarr; +2 points.</p>
+        <p><span class="tag" style="background:var(--danger)"></span><b>Off the mat</b> (too hard) &rarr; &minus;2 points.</p>
+        <p><span class="tag" style="background:var(--felt-line)"></span><b>Short, on the mat</b> &rarr; no points yet — it comes down to who's closest.</p>
+        <p class="sub">After both putts, the round scores like this (opener across the top, responder down the side):</p>
+        <table>
+          <tr><th></th><th>zone</th><th>short</th><th>off</th></tr>
+          <tr><td class="l">zone</td><td>0 / 0</td><td>+2 / 0</td><td>+2 / &minus;2</td></tr>
+          <tr><td class="l">short</td><td>0 / +2</td><td>closest +1</td><td>+1 / &minus;2</td></tr>
+          <tr><td class="l">off</td><td>&minus;2 / +2</td><td>&minus;2 / +1</td><td>&minus;2 / &minus;2</td></tr>
+        </table>
+        <p class="sub">Both in the zone cancel out. If neither scores a zone, the ball closest to its target zone takes +1; the other gets nothing (no negative).</p>
+        <p class="sub">First to the target score wins. Scores can go negative. The opener is the same player every round — there's an edge and a risk to going first.</p>
+        <p class="lead" style="margin-top:14px">Controls: hold the board (or the space bar) to charge the power gauge, and release to putt. The longer you hold, the harder you hit — let go too late and you'll fly off the mat.</p>
+      </div>
+      <div class="menu-foot"><button class="btn primary" id="closeRules">Got it</button></div>
+    </div>
+
+    <!-- Round / game result overlay -->
+    <div class="overlay" id="result">
+      <div style="margin:auto 0">
+        <div class="result-big" id="resultBig"></div>
+        <div class="result-sub" id="resultSub"></div>
+      </div>
+      <div class="menu-foot"><button class="btn primary" id="resultBtn">Continue</button></div>
+    </div>
+  </div>
+
+  <div id="controls" style="display:none">
+    <button class="btn primary" id="actionBtn">Hold to charge</button>
+    <div class="hint" id="hint">Hold the board (or space), release to putt.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+// ---------- Logical canvas geometry ----------
+const W = 460, H = 680;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+function fitCanvas(){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  cv.width = W*dpr; cv.height = H*dpr;
+  cv.style.aspectRatio = W+'/'+H;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+fitCanvas();
+
+// Lane + zones
+const laneX = 64, laneW = 252, laneTop = 70, laneBottom = 610;
+const zoneH = 70;                 // depth of each end zone band
+const launchInset = 26;           // how far inside the line the ball starts
+const usable = laneBottom - laneTop;
+// Player 0 shoots UP toward the TOP zone; launches near bottom.
+// Player 1 shoots DOWN toward the BOTTOM zone; launches near top.
+const launchY = [laneBottom - launchInset, laneTop + launchInset];
+const laneCx = laneX + laneW/2;
+const ballR = 11;
+
+// For shooter p, the travel needed to just reach the far line (overshoot beyond = off mat):
+function maxReach(p){ return p===0 ? (launchY[0]-laneTop) : (laneBottom-launchY[1]); }
+// Map locked power (0..100) -> travel distance. 100 overshoots the far line by 12%.
+function travelFor(p, power){ return maxReach(p) * 1.12 * (power/100); }
+// Inverse: power needed to travel a given distance.
+function powerForTravel(p, travel){ return clamp(travel/(maxReach(p)*1.12)*100, 0, 100); }
+// Final stop Y on the lane for shooter p given power.
+function stopY(p, power){
+  const t = travelFor(p, power);
+  return p===0 ? (launchY[0]-t) : (launchY[1]+t);
+}
+// Classify a stop position into an outcome for shooter p.
+// Returns {type:'zone'|'short'|'off', dist} where dist = px from the near edge of the target zone (smaller = closer).
+function classify(p, y){
+  if(p===0){
+    const nearEdge = laneTop + zoneH;       // near edge of top zone
+    if(y < laneTop) return {type:'off', dist:0};
+    if(y <= nearEdge) return {type:'zone', dist:0};
+    return {type:'short', dist:y - nearEdge};
+  } else {
+    const nearEdge = laneBottom - zoneH;    // near edge of bottom zone
+    if(y > laneBottom) return {type:'off', dist:0};
+    if(y >= nearEdge) return {type:'zone', dist:0};
+    return {type:'short', dist:nearEdge - y};
+  }
+}
+
+// =====================================================================
+//  SCORING — the whole rulebook lives here. Edit cells to retune.
+//  rA = opener outcome, rB = responder outcome ({type, dist}).
+//  Returns {a, b, note} = points for opener / responder + a short label.
+// =====================================================================
+function resolveRound(rA, rB){
+  // Both in the zone: cancels out, nobody scores.
+  if(rA.type==='zone' && rB.type==='zone') return {a:0, b:0, note:'Both in the zone — cancels out'};
+
+  const base = t => t==='zone' ? 2 : t==='off' ? -2 : 0;
+  let a = base(rA.type), b = base(rB.type), note;
+
+  const aZone = rA.type==='zone', bZone = rB.type==='zone';
+  if(aZone || bZone){
+    note = (aZone ? 'Opener' : 'Responder') + ' landed the zone';
+    return {a, b, note};
+  }
+  // Neither scored a zone -> +1 to whoever is closest to their target zone.
+  const aShort = rA.type==='short', bShort = rB.type==='short';
+  if(aShort && bShort){
+    if(rA.dist < rB.dist){ a+=1; note='Opener was closest — +1'; }
+    else if(rB.dist < rA.dist){ b+=1; note='Responder was closest — +1'; }
+    else note='Equal distance — no point';
+  } else if(aShort){            // responder went off the mat
+    a+=1; note='Opener stayed on — +1';   // <-- short-vs-off rule (easy to remove)
+  } else if(bShort){            // opener went off the mat
+    b+=1; note='Responder stayed on — +1';
+  } else {
+    note='Both off the mat';
+  }
+  return {a, b, note};
+}
+
+// ---------- Game state ----------
+const G = {
+  screen:'menu', mode:'cpu', diff:'med', openerIndex:0, target:5,
+  scores:[0,0], round:1, order:[0,1], shotIndex:0, shooter:0,
+  roundShots:[],            // {shooter,type,dist,y}
+  measureLines:[],          // closest-ball feedback lines
+  phase:'menu',             // 'aim_human','aim_cpu','roll','idle'
+};
+const DIFF_SIGMA = {easy:14, med:7, hard:3.5};
+
+// Power meter (hold to charge, release to putt)
+const meter = {value:0, speed:85, charging:false, locked:null, cpuTarget:0};
+// Ball animation
+let ball = null;            // {p, startY, endY, t, dur}
+
+// ---------- DOM ----------
+const $ = id => document.getElementById(id);
+const els = {
+  card1:$('card1'), card2:$('card2'), name1:$('name1'), name2:$('name2'),
+  score1:$('score1'), score2:$('score2'), roundnum:$('roundnum'), targetnum:$('targetnum'),
+  banner:$('bannerText'), action:$('actionBtn'), hint:$('hint'),
+  menu:$('menu'), rules:$('rules'), result:$('result'),
+  resultBig:$('resultBig'), resultSub:$('resultSub'), resultBtn:$('resultBtn'),
+  diffField:$('diffField'), openField:$('openField'),
+};
+function names(){ return G.mode==='2p' ? ['Player 1','Player 2'] : ['You','CPU']; }
+
+// Segmented controls
+function wireSeg(segId, cb){
+  const seg = $(segId);
+  seg.querySelectorAll('button').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      seg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); cb(b.dataset.v);
+    });
+  });
+}
+wireSeg('segMode', v=>{ G.mode=v;
+  els.diffField.style.display = v==='cpu'?'':'none';
+  els.openField.style.display = v==='cpu'?'':'none';
+});
+wireSeg('segDiff', v=>G.diff=v);
+wireSeg('segOpen', v=>G.openerIndex=+v);
+wireSeg('segTarget', v=>G.target=+v);
+
+$('startBtn').addEventListener('click', startGame);
+$('rulesBtn').addEventListener('click', ()=>els.rules.classList.add('show'));
+$('menuRulesBtn').addEventListener('click', ()=>els.rules.classList.add('show'));
+$('closeRules').addEventListener('click', ()=>els.rules.classList.remove('show'));
+els.resultBtn.addEventListener('click', onResultContinue);
+
+// Hold to charge, release to putt
+function pressStart(e){ if(e) e.preventDefault(); if(G.phase==='aim_human' && !meter.charging) beginCharge(); }
+function pressEnd(e){ if(e) e.preventDefault(); if(G.phase==='aim_human' && meter.charging) doLock(meter.value); }
+cv.addEventListener('pointerdown', pressStart);
+els.action.addEventListener('pointerdown', pressStart);
+window.addEventListener('pointerup', pressEnd);
+window.addEventListener('pointercancel', pressEnd);
+window.addEventListener('keydown', e=>{ if(e.code==='Space' && !e.repeat){ e.preventDefault(); pressStart(); }});
+window.addEventListener('keyup', e=>{ if(e.code==='Space'){ e.preventDefault(); pressEnd(); }});
+
+// ---------- Flow ----------
+function startGame(){
+  els.menu.classList.remove('show');
+  document.getElementById('controls').style.display='';
+  G.scores=[0,0]; G.round=1; G.order=[G.openerIndex, 1-G.openerIndex];
+  const nm = names();
+  els.name1.textContent=nm[0]; els.name2.textContent=nm[1];
+  els.targetnum.textContent=G.target;
+  refreshScores();
+  beginRound();
+}
+
+function beginRound(){
+  G.roundShots=[]; G.measureLines=[]; G.shotIndex=0;
+  els.roundnum.textContent=G.round;
+  G.shooter=G.order[0];
+  startTurn();
+}
+
+function startTurn(){
+  setActiveCard(G.shooter);
+  meter.charging=false; meter.value=0; meter.locked=null;
+  const human = isHuman(G.shooter);
+  if(human){
+    G.phase='aim_human';
+    setBanner(turnLabel());
+    els.action.style.display=''; els.action.disabled=false;
+    els.hint.textContent='Hold to charge, release to putt.';
+  } else {
+    G.phase='aim_cpu';
+    setBanner(names()[G.shooter]+' is lining up…');
+    els.action.style.display='none';
+    els.hint.textContent='';
+    const target = cpuTargetPower();
+    const sigma = DIFF_SIGMA[G.diff];
+    meter.cpuTarget = clamp(target + gauss()*sigma, 4, 100);
+    setTimeout(()=>{ if(G.phase==='aim_cpu'){ meter.charging=true; meter.value=0; } }, 850);
+  }
+}
+
+function beginCharge(){
+  meter.charging=true; meter.value=0; meter.locked=null;
+  els.hint.textContent='Release to putt';
+}
+
+function doLock(power){
+  meter.charging=false; meter.locked=power; meter.value=power;
+  els.hint.textContent='';
+  const p=G.shooter;
+  const endY=stopY(p, power);
+  const travel=Math.abs(endY-launchY[p]);
+  ball={p, startY:launchY[p], endY, t:0, dur:0.55+ (travel/usable)*0.7};
+  G.phase='roll';
+}
+
+function finishRoll(){
+  const p=G.shooter;
+  const res=classify(p, ball.endY);
+  G.roundShots.push({shooter:p, type:res.type, dist:res.dist, y:ball.endY});
+  ball=null; meter.locked=null;
+  setBanner(shotLabel(p, res));
+  setTimeout(()=>{
+    if(G.shotIndex===0){
+      G.shotIndex=1; G.shooter=G.order[1];
+      startTurn();
+    } else {
+      scoreRound();
+    }
+  }, 900);
+}
+
+function scoreRound(){
+  const opener=G.order[0], responder=G.order[1];
+  const rO=G.roundShots.find(s=>s.shooter===opener);
+  const rR=G.roundShots.find(s=>s.shooter===responder);
+  const out=resolveRound(rO, rR);
+  G.scores[opener]+=out.a; G.scores[responder]+=out.b;
+  refreshScores();
+  buildMeasureLines();
+  setBanner(out.note);
+
+  // Win check (only one player can gain in a round, so no simultaneous reach)
+  const win = G.scores.some(s=>s>=G.target);
+  const delay = G.measureLines.length ? 1900 : 650;   // linger so the line is seen
+  setTimeout(()=>{
+    if(win){
+      const winner = G.scores[0]>G.scores[1]?0:1;
+      showResult('game', winner, out);
+    } else {
+      showResult('round', null, out);
+    }
+  }, delay);
+}
+
+// Mark which short ball was closest to its target zone, for the feedback line.
+function buildMeasureLines(){
+  G.measureLines=[];
+  if(G.roundShots.some(s=>s.type==='zone')) return;     // a zone shot decides it instead
+  const shorts=G.roundShots.filter(s=>s.type==='short');
+  if(shorts.length===0) return;
+  let winner=null;
+  if(shorts.length===2){
+    if(shorts[0].dist<shorts[1].dist) winner=shorts[0].shooter;
+    else if(shorts[1].dist<shorts[0].dist) winner=shorts[1].shooter;
+  } else {
+    winner=shorts[0].shooter;                            // lone ball on the board wins
+  }
+  shorts.forEach(s=>{
+    const edgeY = s.shooter===0 ? (laneTop+zoneH) : (laneBottom-zoneH);
+    G.measureLines.push({p:s.shooter, y:s.y, edgeY, winner:s.shooter===winner});
+  });
+}
+
+function showResult(kind, winner, out){
+  G.phase='idle'; setActiveCard(-1);
+  if(kind==='game'){
+    const nm=names();
+    els.resultBig.textContent = nm[winner]+' wins';
+    els.resultBig.style.color = winner===0?'var(--p1)':'var(--p2)';
+    els.resultSub.textContent = `${G.scores[0]} — ${G.scores[1]} · reached ${G.target}`;
+    els.resultBtn.textContent='Play again';
+    G._gameOver=true;
+  } else {
+    els.resultBig.textContent = out.note;
+    els.resultBig.style.color = 'var(--cream)';
+    els.resultSub.textContent = `Standing: ${names()[0]} ${G.scores[0]} · ${names()[1]} ${G.scores[1]}`;
+    els.resultBtn.textContent = `${names()[G.order[0]]} opens round ${G.round+1}`;
+    G._gameOver=false;
+  }
+  els.result.classList.add('show');
+}
+
+function onResultContinue(){
+  els.result.classList.remove('show');
+  if(G._gameOver){ els.menu.classList.add('show'); G.phase='menu'; document.getElementById('controls').style.display='none'; return; }
+  G.round++; beginRound();
+}
+
+// ---------- CPU strategy ----------
+function cpuTargetPower(){
+  const me=G.shooter, opp=1-me;
+  const zoneCenterPower = powerForTravel(me, maxReach(me) - zoneH/2);
+  const safePower = power => power; // alias for readability
+  const isOpener = (G.shotIndex===0);
+  const behind = G.scores[me] - G.scores[opp];
+
+  if(isOpener){
+    // Mostly go for the zone; if comfortably ahead and near winning, shade safe.
+    if(G.scores[me] >= G.target-1 && behind>0)
+      return powerForTravel(me, maxReach(me) - zoneH - usable*0.10);
+    return zoneCenterPower;
+  }
+  // Responder: react to the opener's ball.
+  const opener = G.roundShots[0];
+  if(opener.type==='zone') return zoneCenterPower;            // must match to cancel
+  if(opener.type==='off'){                                    // free +1: stay on board safely
+    return powerForTravel(me, maxReach(me) - zoneH - usable*0.22);
+  }
+  // Opener landed short at distance opener.dist from its near edge.
+  const openerDist = opener.dist;
+  // If opener is already very close, safe-beating risks overshooting -> gamble for the zone.
+  if(openerDist < usable*0.10 || behind <= -3) return zoneCenterPower;
+  // Otherwise nestle just inside the opener for the +1.
+  const targetDist = Math.max(openerDist*0.5, usable*0.04);
+  return powerForTravel(me, (maxReach(me) - zoneH) - targetDist);
+}
+
+// ---------- Helpers ----------
+function isHuman(p){ return G.mode==='2p' ? true : p===0; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function gauss(){ return (Math.random()+Math.random()+Math.random()-1.5)*1.1; } // ~N(0,1)
+function setBanner(t){ els.banner.textContent=t; }
+function turnLabel(){
+  const role = G.shotIndex===0 ? 'opens' : 'responds';
+  return `${names()[G.shooter]} ${role}`;
+}
+function shotLabel(p, res){
+  if(res.type==='zone') return `${names()[p]} — in the zone! +2`;
+  if(res.type==='off')  return `${names()[p]} — off the mat. −2`;
+  return `${names()[p]} — short, on the board`;
+}
+function setActiveCard(p){
+  els.card1.classList.toggle('active', p===0);
+  els.card2.classList.toggle('active', p===1);
+}
+function refreshScores(){
+  els.score1.textContent=G.scores[0];
+  els.score2.textContent=G.scores[1];
+}
+
+// ---------- Render ----------
+function roundedRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawBoard(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0f131a'; ctx.fillRect(0,0,W,H);
+
+  // Felt lane with mowing stripes
+  ctx.save();
+  roundedRect(laneX, laneTop, laneW, usable, 10); ctx.clip();
+  ctx.fillStyle='var(--felt)'; ctx.fillStyle='#2e6b43'; ctx.fillRect(laneX,laneTop,laneW,usable);
+  const stripe=34;
+  for(let y=laneTop; y<laneBottom; y+=stripe){
+    ctx.fillStyle = (Math.floor((y-laneTop)/stripe)%2)? '#27603b':'#327049';
+    ctx.fillRect(laneX, y, laneW, stripe);
+  }
+  // End zones
+  ctx.fillStyle='rgba(232,200,106,.20)';
+  ctx.fillRect(laneX, laneTop, laneW, zoneH);
+  ctx.fillRect(laneX, laneBottom-zoneH, laneW, zoneH);
+  ctx.strokeStyle='rgba(232,200,106,.85)'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(laneX, laneTop+zoneH); ctx.lineTo(laneX+laneW, laneTop+zoneH);
+  ctx.moveTo(laneX, laneBottom-zoneH); ctx.lineTo(laneX+laneW, laneBottom-zoneH);
+  ctx.stroke();
+  ctx.restore();
+  // lane border
+  ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1;
+  roundedRect(laneX, laneTop, laneW, usable, 10); ctx.stroke();
+
+  // Launch markers
+  ctx.setLineDash([5,6]); ctx.strokeStyle='rgba(255,255,255,.22)';
+  ctx.beginPath();
+  ctx.moveTo(laneX+10, launchY[0]); ctx.lineTo(laneX+laneW-10, launchY[0]);
+  ctx.moveTo(laneX+10, launchY[1]); ctx.lineTo(laneX+laneW-10, launchY[1]);
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Closest-ball measurement feedback
+  drawMeasureLines();
+  // Already-resolved balls this round
+  G.roundShots.forEach(s=>{ if(s.type!=='off') drawBall(s.y, s.shooter, 0.92); });
+  // Live ball
+  if(ball) drawBall(ballY(), ball.p, 1);
+
+  drawMeter();
+}
+function drawMeasureLines(){
+  if(!G.measureLines.length) return;
+  ctx.font='500 12px "Space Grotesk",sans-serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+  G.measureLines.forEach(L=>{
+    const win=L.winner;
+    ctx.strokeStyle = win ? '#e8c86a' : 'rgba(237,235,228,.4)';
+    ctx.lineWidth = win ? 3 : 1.5;
+    ctx.setLineDash(win ? [] : [4,5]);
+    ctx.beginPath(); ctx.moveTo(laneCx, L.y); ctx.lineTo(laneCx, L.edgeY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(laneCx-10, L.edgeY); ctx.lineTo(laneCx+10, L.edgeY); ctx.stroke();
+    ctx.setLineDash([]);
+    if(win){
+      ctx.fillStyle='#e8c86a';
+      ctx.fillText('closest', laneCx+16, (L.y+L.edgeY)/2);
+    }
+  });
+}
+function ballY(){
+  const e=easeOut(Math.min(ball.t/ball.dur,1));
+  return ball.startY + (ball.endY-ball.startY)*e;
+}
+function drawBall(y, p, alpha){
+  const col = p===0 ? '#ff7a59' : '#36c5c0';
+  ctx.globalAlpha=alpha;
+  ctx.beginPath(); ctx.arc(laneCx, y, ballR, 0, Math.PI*2);
+  ctx.fillStyle=col; ctx.fill();
+  ctx.beginPath(); ctx.arc(laneCx-3, y-3, ballR*0.38, 0, Math.PI*2);
+  ctx.fillStyle='rgba(255,255,255,.35)'; ctx.fill();
+  ctx.globalAlpha=1;
+}
+function drawMeter(){
+  const mx=laneX+laneW+24, mw=20, my=laneTop, mh=usable;
+  // track
+  roundedRect(mx, my, mw, mh, 9);
+  ctx.fillStyle='rgba(255,255,255,.06)'; ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.lineWidth=1; ctx.stroke();
+  const showVal = (G.phase==='aim_human'||G.phase==='aim_cpu') ? meter.value
+                : (meter.locked!=null ? meter.locked : null);
+  if(showVal==null) return;
+  const fillH = mh*(showVal/100);
+  ctx.save();
+  roundedRect(mx, my, mw, mh, 9); ctx.clip();
+  ctx.fillStyle = meter.charging ? '#e8c86a' : '#edebe4';
+  ctx.fillRect(mx, my+mh-fillH, mw, fillH);
+  ctx.restore();
+}
+
+// ---------- Loop ----------
+let last=performance.now();
+function loop(now){
+  const dt=Math.min((now-last)/1000, 0.05); last=now;
+  if(meter.charging && (G.phase==='aim_human'||G.phase==='aim_cpu')){
+    meter.value += meter.speed*dt;
+    if(meter.value>=100) meter.value=100;
+    if(G.phase==='aim_cpu' && meter.value>=meter.cpuTarget) doLock(meter.value);
+  }
+  if(ball && G.phase==='roll'){
+    ball.t+=dt;
+    if(ball.t>=ball.dur){ ball.t=ball.dur; finishRoll(); }
+  }
+  drawBoard();
+  requestAnimationFrame(loop);
+}
+function easeOut(t){ return 1-Math.pow(1-t,2.4); }
+window.addEventListener('resize', fitCanvas);
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
